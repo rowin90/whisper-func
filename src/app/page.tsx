@@ -10,6 +10,8 @@ import type { FunctionCall } from '@/lib/functionRegistry/types';
 
 const { Header, Content, Sider } = Layout;
 
+const STORAGE_KEY = 'whisper-func-chat-messages';
+
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -18,6 +20,39 @@ export default function Home() {
   );
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  // 从 localStorage 加载聊天记录
+  useEffect(() => {
+    try {
+      const savedMessages = localStorage.getItem(STORAGE_KEY);
+      if (savedMessages) {
+        const parsed = JSON.parse(savedMessages);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+        }
+      }
+    } catch (error) {
+      console.error('加载聊天记录失败:', error);
+    }
+  }, []);
+
+  // 保存聊天记录到 localStorage
+  useEffect(() => {
+    try {
+      if (messages.length > 0) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+      } else {
+        // 如果消息为空，清除存储
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch (error) {
+      console.error('保存聊天记录失败:', error);
+      // 如果存储空间不足，尝试清理旧数据
+      if (error instanceof Error && error.name === 'QuotaExceededError') {
+        message.warning('存储空间不足，请清空部分聊天记录');
+      }
+    }
+  }, [messages]);
 
   // 检测移动设备
   useEffect(() => {
@@ -141,11 +176,20 @@ export default function Home() {
     [isMobile]
   );
 
+  const handleCloseVisualization = useCallback(() => {
+    setSelectedMessage(null);
+    setDrawerVisible(false);
+  }, []);
+
   const displayFunctionCalls: FunctionCall[] =
     selectedMessage?.functionCalls || [];
 
   const visualizationContent = (
-    <CallVisualization functionCalls={displayFunctionCalls} />
+    <CallVisualization
+      functionCalls={displayFunctionCalls}
+      onClose={handleCloseVisualization}
+      showCloseButton={true}
+    />
   );
 
   return (
@@ -169,15 +213,32 @@ export default function Home() {
         >
           语音交互AI方法调用演示
         </h1>
-        {isMobile && displayFunctionCalls.length > 0 && (
-          <Button
-            type="primary"
-            onClick={() => setDrawerVisible(true)}
-            size="small"
-          >
-            查看调用详情
-          </Button>
-        )}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {messages.length > 0 && (
+            <Button
+              type="text"
+              size="small"
+              onClick={() => {
+                if (confirm('确定要清空聊天记录吗？')) {
+                  setMessages([]);
+                  setSelectedMessage(null);
+                  message.success('聊天记录已清空');
+                }
+              }}
+            >
+              清空记录
+            </Button>
+          )}
+          {isMobile && displayFunctionCalls.length > 0 && (
+            <Button
+              type="primary"
+              onClick={() => setDrawerVisible(true)}
+              size="small"
+            >
+              查看调用详情
+            </Button>
+          )}
+        </div>
       </Header>
       <Layout>
         <Content
