@@ -1,65 +1,249 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useCallback, useEffect } from 'react';
+import { Layout, Spin, message, Drawer, Button } from 'antd';
+import { InputPanel } from './components/InputPanel';
+import { ChatHistory } from './components/ChatHistory';
+import { CallVisualization } from './components/CallVisualization';
+import type { ChatMessage } from '@/types/chat';
+import type { FunctionCall } from '@/lib/functionRegistry/types';
+
+const { Header, Content, Sider } = Layout;
 
 export default function Home() {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(
+    null
+  );
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // 检测移动设备
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const handleSubmit = useCallback(
+    async (userInput: string) => {
+      if (!userInput.trim() || isLoading) return;
+
+      // 添加用户消息
+      const userMessage: ChatMessage = {
+        id: `msg_${Date.now()}_user`,
+        role: 'user',
+        content: userInput,
+        timestamp: Date.now(),
+      };
+
+      setMessages((prev) => [...prev, userMessage]);
+      setIsLoading(true);
+
+      try {
+        // 准备消息历史
+        const chatMessages = [
+          ...messages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+          {
+            role: 'user' as const,
+            content: userInput,
+          },
+        ];
+
+        // 调用API（添加超时处理）
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messages: chatMessages,
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || '请求失败');
+        }
+
+        const data = await response.json();
+
+        // 添加AI回复
+        const assistantMessage: ChatMessage = {
+          id: `msg_${Date.now()}_assistant`,
+          role: 'assistant',
+          content: data.message.content || '',
+          timestamp: Date.now(),
+          functionCalls: data.functionCalls || [],
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        // 如果有函数调用，显示提示
+        if (data.functionCalls && data.functionCalls.length > 0) {
+          message.success(
+            `成功调用了 ${data.functionCalls.length} 个方法`
+          );
+        }
+      } catch (error) {
+        console.error('Chat error:', error);
+
+        let errorMessage = '发送消息失败，请稍后重试';
+        if (error instanceof Error) {
+          if (error.name === 'AbortError') {
+            errorMessage = '请求超时，请稍后重试';
+          } else if (error.message.includes('Failed to fetch')) {
+            errorMessage = '网络连接失败，请检查网络设置';
+          } else {
+            errorMessage = error.message;
+          }
+        }
+
+        message.error(errorMessage);
+
+        // 添加错误消息
+        const errorMsg: ChatMessage = {
+          id: `msg_${Date.now()}_error`,
+          role: 'assistant',
+          content: `抱歉，发生了错误: ${errorMessage}`,
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, errorMsg]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [messages, isLoading]
+  );
+
+  const handleMessageClick = useCallback(
+    (message: ChatMessage) => {
+      if (message.functionCalls && message.functionCalls.length > 0) {
+        setSelectedMessage(message);
+        if (isMobile) {
+          setDrawerVisible(true);
+        }
+      }
+    },
+    [isMobile]
+  );
+
+  const displayFunctionCalls: FunctionCall[] =
+    selectedMessage?.functionCalls || [];
+
+  const visualizationContent = (
+    <CallVisualization functionCalls={displayFunctionCalls} />
+  );
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <Layout style={{ minHeight: '100vh' }}>
+      <Header
+        style={{
+          background: '#fff',
+          borderBottom: '1px solid #e8e8e8',
+          padding: isMobile ? '0 12px' : '0 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <h1
+          style={{
+            margin: 0,
+            fontSize: isMobile ? '16px' : '20px',
+            fontWeight: 'bold',
+          }}
+        >
+          语音交互AI方法调用演示
+        </h1>
+        {isMobile && displayFunctionCalls.length > 0 && (
+          <Button
+            type="primary"
+            onClick={() => setDrawerVisible(true)}
+            size="small"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+            查看调用详情
+          </Button>
+        )}
+      </Header>
+      <Layout>
+        <Content
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: 'calc(100vh - 64px)',
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              overflow: 'hidden',
+              position: 'relative',
+            }}
+          >
+            {isLoading && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: isMobile ? '12px' : '16px',
+                  zIndex: 10,
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  padding: '8px',
+                  borderRadius: '4px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                }}
+              >
+                <Spin size="small" tip="处理中..." />
+              </div>
+            )}
+            <ChatHistory
+              messages={messages}
+              onMessageClick={handleMessageClick}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </div>
+          <InputPanel onSubmit={handleSubmit} disabled={isLoading} />
+        </Content>
+        {!isMobile && displayFunctionCalls.length > 0 && (
+          <Sider
+            width={400}
+            style={{
+              background: '#fff',
+              borderLeft: '1px solid #e8e8e8',
+              overflow: 'auto',
+            }}
           >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            {visualizationContent}
+          </Sider>
+        )}
+      </Layout>
+      {isMobile && (
+        <Drawer
+          title="方法调用详情"
+          placement="right"
+          onClose={() => setDrawerVisible(false)}
+          open={drawerVisible}
+          width="90%"
+          styles={{
+            body: { padding: '16px' },
+          }}
+        >
+          {visualizationContent}
+        </Drawer>
+      )}
+    </Layout>
   );
 }
