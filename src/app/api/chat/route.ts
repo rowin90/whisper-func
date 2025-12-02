@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { chatWithFunctions, ChatMessage } from '@/lib/openai/client';
-import { functionRegistry } from '@/lib/functionRegistry/registry';
+import { mcpClient } from '@/lib/mcp/client';
 import { FunctionCall } from '@/lib/functionRegistry/types';
 
 export const runtime = 'nodejs';
@@ -14,7 +14,7 @@ export const maxDuration = 30;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { messages, functionCalls } = body;
+    const { messages } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -24,8 +24,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 转换消息格式
-    const chatMessages: ChatMessage[] = messages.map((msg: any) => ({
-      role: msg.role,
+    const chatMessages: ChatMessage[] = messages.map((msg: {
+      role: string;
+      content?: string;
+      name?: string;
+      function_call?: { name: string; arguments: string };
+    }) => ({
+      role: msg.role as ChatMessage['role'],
       content: msg.content,
       name: msg.name,
       function_call: msg.function_call,
@@ -43,14 +48,20 @@ export async function POST(request: NextRequest) {
     }
 
     const result: {
-      message: any;
+      message: {
+        role: string;
+        content: string | null;
+        function_call?: { name: string; arguments: string };
+      };
       functionCalls?: FunctionCall[];
       finishReason: string;
     } = {
       message: {
         role: assistantMessage.role,
         content: assistantMessage.content,
-        function_call: assistantMessage.function_call,
+        ...(assistantMessage.function_call && {
+          function_call: assistantMessage.function_call,
+        }),
       },
       finishReason: response.choices[0]?.finish_reason || 'stop',
     };
@@ -71,8 +82,8 @@ export async function POST(request: NextRequest) {
             );
             const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-            // 执行函数
-            const callResult = await functionRegistry.executeFunction(
+            // 通过MCP客户端执行函数
+            const callResult = await mcpClient.callTool(
               functionName,
               functionArgs,
               callId
@@ -95,13 +106,13 @@ export async function POST(request: NextRequest) {
                   },
                 },
               ],
-            } as any);
+            } as ChatMessage);
 
             chatMessages.push({
               role: 'tool',
               tool_call_id: toolCall.id,
               content: JSON.stringify(callResult.result || callResult.error),
-            } as any);
+            } as ChatMessage);
           }
         } catch (error) {
           const toolCallName =
@@ -113,7 +124,7 @@ export async function POST(request: NextRequest) {
           const errorCall: FunctionCall = {
             id: `error_${Date.now()}`,
             name: toolCallName,
-            arguments: toolCallArgs,
+            arguments: JSON.parse(toolCallArgs || '{}'),
             timestamp: Date.now(),
             status: 'failed',
             error: error instanceof Error ? error.message : String(error),
