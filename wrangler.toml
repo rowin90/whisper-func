@@ -5,3 +5,6 @@
   [assets]
   directory = ".open-next/assets"
   binding = "ASSETS"
+
+# 单个路由配置
+route = { pattern = "whisper.obli.uno/*", zone_name = "obli.uno" }
