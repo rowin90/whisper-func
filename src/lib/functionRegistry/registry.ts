@@ -8,6 +8,7 @@ import { fileOperations } from './functions/fileOperations';
 import { calculator } from './functions/calculator';
 import { apiCalls } from './functions/apiCalls';
 import { dataProcessing } from './functions/dataProcessing';
+import { productSearch } from './functions/productSearch';
 
 class FunctionRegistry {
   private functions: Map<string, FunctionDefinition> = new Map();
@@ -18,6 +19,7 @@ class FunctionRegistry {
     this.registerFunctions(calculator);
     this.registerFunctions(apiCalls);
     this.registerFunctions(dataProcessing);
+    this.registerFunctions(productSearch);
   }
 
   /**

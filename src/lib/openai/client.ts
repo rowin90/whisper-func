@@ -37,14 +37,50 @@ export interface ChatMessage {
 }
 
 /**
+ * System Prompt - 翻译指令
+ */
+const SYSTEM_PROMPT = `你是一个智能助手，可以帮助用户调用各种本地函数。
+
+重要规则：
+1. **语言翻译规则**：
+   - 当用户使用中文输入时，你需要将中文关键词翻译成英文用于函数调用
+   - 函数调用的参数必须使用英文（如函数名、参数值等）
+   - 但最终回复给用户时，请使用中文
+
+2. **翻译示例**：
+   - 用户说："搜索氧气传感器" → 调用函数时使用 keyword: "Oxygen Sensor"
+   - 用户说："帮我计算 123 + 456" → 调用函数时使用 expression: "123 + 456"
+   - 用户说："读取 package.json 文件" → 调用函数时使用 filePath: "package.json"
+   - 用户说："获取当前时间" → 调用函数时使用 get_current_time
+
+3. **输出规则**：
+   - 函数调用的参数使用英文
+   - 最终回复给用户的内容使用中文
+   - 如果用户使用英文输入，则保持英文不变
+
+4. **函数调用**：
+   - 仔细分析用户需求，判断是否需要调用函数
+   - 调用函数时，确保参数值使用英文（如果是关键词、文件名等）
+   - 函数执行后，用中文向用户解释结果`;
+
+/**
  * 调用OpenAI API进行聊天
  */
 export async function chatWithFunctions(messages: ChatMessage[]) {
   const functions = functionRegistry.getOpenAIFunctions();
 
+  // 构建消息列表，确保第一条是system message
+  const messagesWithSystem: ChatMessage[] = [
+    {
+      role: 'system',
+      content: SYSTEM_PROMPT,
+    },
+    ...messages,
+  ];
+
   // 转换消息格式，确保符合OpenAI API要求
   const formattedMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
-    messages
+    messagesWithSystem
       .map((msg) => {
         // 处理tool角色消息
         if (msg.role === 'tool') {
