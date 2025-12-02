@@ -1,7 +1,6 @@
 /**
  * 商品搜索函数
  */
-
 import { FunctionDefinition } from '../types';
 
 export const productSearch: FunctionDefinition[] = [
