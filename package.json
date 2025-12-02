@@ -5,8 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "dev:turbopack": "next dev --turbopack",
+    "build:turbopack": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "mcp:server": "tsx scripts/mcp-server.ts"
   },
   "dependencies": {
