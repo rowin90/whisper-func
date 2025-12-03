@@ -94,7 +94,7 @@ export default function Home() {
 
         // 调用API（添加超时处理）
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+        const timeoutId = setTimeout(() => controller.abort(), 60000 * 2); // 60秒超时
 
         const response = await fetch('/api/chat', {
           method: 'POST',
